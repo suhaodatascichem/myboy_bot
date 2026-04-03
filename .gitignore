@@ -1,0 +1,12 @@
+# API Secrets AND Environments
+.env
+bot_env/
+__pycache__/
+.vscode/
+
+# User Data
+mistakes.db
+images/
+
+# MacOS System Files
+.DS_Store
