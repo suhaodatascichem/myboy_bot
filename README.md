@@ -12,7 +12,7 @@ An Agentic Personal Assistant designed to help parents track and gamify their pr
 ## Installation
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR_USERNAME/myboy_bot.git
+git clone https://github.com/suhaodatascichem/myboy_bot.git
 cd myboy_bot
 ```
 2. Install requirements
