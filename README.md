@@ -153,6 +153,29 @@ The bot is now running in the background. You can safely close the SSH tab.
 
 ---
 
+### update the bot / code
+
+If you need to update code, you can use the following commands:
+
+```bash
+# Re-attach to screen
+screen -r mybot
+
+# Stop the bot
+Ctrl + C
+
+# Pull latest code
+git pull
+
+# Restart
+python main.py
+
+# Detach again
+Ctrl + A, then D
+```
+
+---
+
 ### Redeploying from scratch
 
 If you need a clean re-deploy at any time:
