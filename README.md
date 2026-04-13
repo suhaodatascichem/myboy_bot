@@ -15,17 +15,22 @@ An Agentic Personal Assistant designed to help parents track and gamify their pr
 git clone https://github.com/suhaodatascichem/myboy_bot.git
 cd myboy_bot
 ```
-2. Install requirements
+2. Create and activate a virtual environment:
+```bash
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+3. Install requirements
 ```bash
 pip install -r requirements.txt
 ```
-3. Create a `.env` file in the root directory and insert your secrets:
+4. Create a `.env` file in the root directory and insert your secrets:
 ```
 TELEGRAM_BOT_TOKEN=your_telegram_token
 GEMINI_API_KEY=your_google_ai_studio_key
 ALLOWED_USER_ID=your_personal_telegram_numeric_id
 ```
-4. Run the Engine:
+5. Run the Engine:
 ```bash
 python main.py
 ```
