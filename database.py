@@ -84,12 +84,16 @@ def get_random_mistake(subject=None, concept=None):
     query = "SELECT id, subject, concept, extracted_text, summary, image_path FROM mistakes WHERE status = 'active'"
     params = []
     
-    if subject:
-         query += " AND LOWER(subject) LIKE ?"
-         params.append(f"%{subject.lower()}%")
-    if concept:
-         query += " AND LOWER(concept) LIKE ?"
-         params.append(f"%{concept.lower()}%")
+    if subject and not concept:
+         query += " AND (LOWER(subject) LIKE ? OR LOWER(concept) LIKE ?)"
+         params.extend([f"%{subject.lower()}%", f"%{subject.lower()}%"])
+    else:
+         if subject:
+              query += " AND LOWER(subject) LIKE ?"
+              params.append(f"%{subject.lower()}%")
+         if concept:
+              query += " AND LOWER(concept) LIKE ?"
+              params.append(f"%{concept.lower()}%")
          
     query += " ORDER BY RANDOM() LIMIT 1"
     
