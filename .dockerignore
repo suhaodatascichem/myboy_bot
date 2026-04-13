@@ -1,0 +1,9 @@
+.env
+bot_env/
+__pycache__/
+.vscode/
+mistakes.db
+images/
+.git/
+.gitignore
+setup.py

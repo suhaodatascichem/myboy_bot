@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  myboy_bot:
+    build: .
+    container_name: myboy_agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # We bind-mount the database and images so that when the Docker container goes to sleep or updates, the user's data survives permanently on their Laptop's hard drive!
+      - ./mistakes.db:/app/mistakes.db
+      - ./images:/app/images
