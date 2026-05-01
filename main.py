@@ -97,7 +97,12 @@ async def parse_and_send_reply(update: Update, reply: str):
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update): return
     user_id = update.effective_user.id
-    photo_file = await update.message.photo[-1].get_file()
+    if update.message.photo:
+        photo_file = await update.message.photo[-1].get_file()
+    elif update.message.document:
+        photo_file = await update.message.document.get_file()
+    else:
+        return
     
     os.makedirs("images", exist_ok=True)
     temp_image_path = f"images/temp_{photo_file.file_id}.jpg"
@@ -197,7 +202,7 @@ def main():
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
