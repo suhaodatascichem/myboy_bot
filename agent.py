@@ -6,6 +6,7 @@ import logging
 from database import get_weaknesses
 from skills.calendar_skill import generate_calendar_link
 from skills.mistake_book_skill import MistakeBookTools
+from skills.vocab_skill import VocabTools
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +16,7 @@ class PersonalAssistant:
         if self.api_key:
             self.client = genai.Client(api_key=self.api_key)
         self.mistake_tools = MistakeBookTools()
+        self.vocab_tools = VocabTools()
         self.active_chats = {}
 
     def handle_message(self, user_id: int, user_text: str, image_path: str = None) -> str:
@@ -58,6 +60,16 @@ class PersonalAssistant:
         [ACTION:REVIEW_MISTAKE:Math:Area of Triangle]
         Never try to output the question text yourself from memory. Just output your textual response and the special command, and my UI will instantly load the correct image natively into the chat along with a Mastered button!
         
+        6. Vocabulary Tutor: If the user sends a new English word or text to learn, provide its phonetic spelling, English meaning, Chinese translation, and an example sentence. Then immediately call `log_vocabulary` to save it with an auto-assigned category (e.g., 'Emotion', 'Business', 'Kitchen').
+        
+        7. REVIEWING VOCABULARY LIMITATION: If the user asks to review vocabulary, test them, or do flashcards (e.g., "test my words" or "quiz me on Kitchen words"), you MUST naturally reply with this exact special command on its own line:
+        [ACTION:REVIEW_VOCAB]
+        If they specify a category they want to review, include it:
+        [ACTION:REVIEW_VOCAB:Kitchen]
+        Do NOT output the flashcard word yourself. My UI will instantly load a random vocabulary word natively into the chat with interactive buttons!
+        
+        8. VOCABULARY STORY MODE: If the user asks for a story using their words, DO NOT output an ACTION. Instead, call `get_recent_vocab_for_story` to fetch 5 recent words, and write a fun, creative story using all of those words!
+        
         Please format your final replies in markdown so it looks clean to the user. Do not leak internal tool logic.
         """
         
@@ -65,7 +77,9 @@ class PersonalAssistant:
             self.mistake_tools.log_mistake,
             self.mistake_tools.analyze_weaknesses,
             self.mistake_tools.archive_mastered_concept,
-            generate_calendar_link
+            generate_calendar_link,
+            self.vocab_tools.log_vocabulary,
+            self.vocab_tools.get_recent_vocab_for_story
         ]
         
         config = types.GenerateContentConfig(

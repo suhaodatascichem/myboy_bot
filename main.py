@@ -15,7 +15,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from database import init_db, get_random_mistake, mark_mistake_mastered_by_id
+from database import init_db, get_random_mistake, mark_mistake_mastered_by_id, get_random_vocabulary, mark_vocabulary_mastered_by_id, get_vocabulary_by_id
 from agent import PersonalAssistant
 
 pa = PersonalAssistant()
@@ -92,7 +92,30 @@ async def parse_and_send_reply(update: Update, reply: str):
         else:
             await update.message.reply_text(f"{clean_reply}\n\n*No active mistakes found matching that criteria!*", parse_mode="Markdown")
     else:
-        await update.message.reply_text(reply)
+        vocab_match = re.search(r'\[ACTION:REVIEW_VOCAB(?::(.*?))?\]', reply, re.IGNORECASE)
+        if vocab_match:
+            category = vocab_match.group(1).strip() if vocab_match.group(1) else None
+            vocab = get_random_vocabulary(category)
+            
+            clean_reply = re.sub(r'\[ACTION:REVIEW_VOCAB.*?\]', '', reply, flags=re.IGNORECASE).strip()
+            
+            if vocab:
+                v_id, v_word, v_meaning, v_translation, v_example, v_category = vocab
+                
+                caption = f"🔤 **Vocabulary Flashcard:**\n\n# {v_word}"
+                if clean_reply:
+                    caption = f"{clean_reply}\n\n{caption}"
+                    
+                keyboard = [
+                    [InlineKeyboardButton("📖 Show Meaning", callback_data=f"show_vocab_meaning_{v_id}")]
+                ]
+                reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+                
+                await update.message.reply_text(caption, reply_markup=reply_markup, parse_mode="Markdown")
+            else:
+                await update.message.reply_text(f"{clean_reply}\n\n*No active vocabulary found matching that criteria!*", parse_mode="Markdown")
+        else:
+            await update.message.reply_text(reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update): return
@@ -184,6 +207,46 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode="Markdown",
                 reply_markup=None
             )
+    elif data.startswith("show_vocab_meaning_"):
+        vocab_id = int(data.split("_")[3])
+        vocab = get_vocabulary_by_id(vocab_id)
+        if vocab:
+            v_word, v_meaning, v_translation, v_example = vocab
+            new_text = f"🔤 **Vocabulary Flashcard:**\n\n# {v_word}\n\n📖 **Meaning:** {v_meaning}\n🇨🇳 **Translation:** {v_translation}\n📝 **Example:** {v_example}"
+            
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Knew it (Mastered)", callback_data=f"mastered_vocab_{vocab_id}"),
+                    InlineKeyboardButton("❌ Forgot (Keep)", callback_data=f"keep_vocab_{vocab_id}")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+            await query.edit_message_text(text=new_text, parse_mode="Markdown", reply_markup=reply_markup)
+    elif data.startswith("mastered_vocab_"):
+        vocab_id = int(data.split("_")[2])
+        mark_vocabulary_mastered_by_id(vocab_id)
+        
+        await query.edit_message_text(
+            text=query.message.text + "\n\n🎉 **MARKED AS MASTERED! (Archived)**",
+            parse_mode="Markdown",
+            reply_markup=None
+        )
+        
+        chat_id = query.message.chat_id
+        await context.bot.send_dice(chat_id=chat_id, emoji='🎰')
+        
+        await context.bot.send_chat_action(chat_id=chat_id, action='typing')
+        loop = asyncio.get_event_loop()
+        praise_text = await loop.run_in_executor(None, pa.generate_praise)
+        
+        await context.bot.send_message(chat_id=chat_id, text="🎆")
+        await context.bot.send_message(chat_id=chat_id, text=f"*{praise_text}*", parse_mode="Markdown")
+    elif data.startswith("keep_vocab_"):
+        await query.edit_message_text(
+            text=query.message.text + "\n\n🕒 **KEPT FOR LATER REVIEW**",
+            parse_mode="Markdown",
+            reply_markup=None
+        )
 
 async def post_init(application: Application):
     await application.bot.set_my_commands([

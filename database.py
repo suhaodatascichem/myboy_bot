@@ -18,6 +18,19 @@ def init_db():
         )
     ''')
     
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vocabulary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            word TEXT,
+            meaning TEXT,
+            translation TEXT,
+            example_sentence TEXT,
+            category TEXT,
+            status TEXT DEFAULT 'active'
+        )
+    ''')
+    
     try:
         cursor.execute("ALTER TABLE mistakes ADD COLUMN status TEXT DEFAULT 'active'")
     except sqlite3.OperationalError:
@@ -108,3 +121,67 @@ def mark_mistake_mastered_by_id(mistake_id: int):
     cursor.execute("UPDATE mistakes SET status = 'resolved' WHERE id = ?", (mistake_id,))
     conn.commit()
     conn.close()
+
+def save_vocabulary(word, meaning, translation, example_sentence, category):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO vocabulary (word, meaning, translation, example_sentence, category)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (word, meaning, translation, example_sentence, category))
+    conn.commit()
+    conn.close()
+
+def get_random_vocabulary(category=None):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    query = "SELECT id, word, meaning, translation, example_sentence, category FROM vocabulary WHERE status = 'active'"
+    params = []
+    
+    if category and category.lower() != "any":
+         query += " AND LOWER(category) LIKE ?"
+         params.append(f"%{category.lower()}%")
+         
+    query += " ORDER BY RANDOM() LIMIT 1"
+    
+    cursor.execute(query, params)
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+def mark_vocabulary_mastered_by_id(vocab_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE vocabulary SET status = 'resolved' WHERE id = ?", (vocab_id,))
+    conn.commit()
+    conn.close()
+
+def get_recent_vocab_for_story(limit=5):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT word, meaning 
+        FROM vocabulary 
+        WHERE status = 'active'
+        ORDER BY timestamp DESC 
+        LIMIT ?
+    ''', (limit,))
+    results = cursor.fetchall()
+    conn.close()
+    
+    if not results:
+        return "No active vocabulary found."
+        
+    formatted = "Recent Vocabulary:\n"
+    for w, m in results:
+        formatted += f"- {w}: {m}\n"
+    return formatted
+
+def get_vocabulary_by_id(vocab_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT word, meaning, translation, example_sentence FROM vocabulary WHERE id = ?", (vocab_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result

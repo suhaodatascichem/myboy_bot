@@ -8,6 +8,9 @@ An Agentic Personal Assistant designed to help parents track and gamify their pr
 - **Conversational Memory:** The internal agent strictly maps chat contexts to Telegram user IDs. You can upload an image and casually follow up with "Can you give me the solution to that?" and it will understand.
 - **Micro-Tutor:** Ask the bot to drill the student on any past mistakes ("Give me a math question I previously got wrong").
 - **Gamified "Mastery" UI:** When reviewing mistakes, children are presented with interactive Telegram UI buttons. Clicking "Mastered" archives the mistake while rewarding the child with native Telegram animations (slot machines, fireworks) and uniquely generated AI praise (e.g. "You are an absolute space pirate!").
+- **Vocabulary Learning:** Send a new English word or text, and the AI will reply with its phonetics, meaning, translation, and example sentence, then save it under an auto-assigned category.
+- **Interactive Flashcards:** Ask the bot to test you on your vocabulary (e.g., "Quiz me on Business words"). It will present a word with a "Show Meaning" button. Click it to reveal the answer and mark it as mastered or keep it for later.
+- **Vocabulary Story Mode:** Ask the bot to "Write a story using my recent words" and it will generate a fun, creative story seamlessly integrating your recently learned vocabulary!
 - **Calendar Automation:** Send a photo of a school flyer or PTA meeting document to instantly generate a 1-click Google Calendar `add-to-calendar` URL!
 
 ---
