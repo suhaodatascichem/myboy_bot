@@ -1,0 +1,19 @@
+[Unit]
+Description=MyBoy Telegram Bot Personal Assistant
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=suhao_chem_datasci
+Group=suhao_chem_datasci
+WorkingDirectory=/home/suhao_chem_datasci/myboy_bot
+EnvironmentFile=/home/suhao_chem_datasci/myboy_bot/.env
+ExecStart=/home/suhao_chem_datasci/myboy_bot/venv/bin/python /home/suhao_chem_datasci/myboy_bot/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -113,68 +113,65 @@ When prompted about restarting services, select **none of the above** (typically
 
 ---
 
-### Step 6 — Install `screen` (if not already installed)
+### Step 6 — Set up systemd Service (Recommended for 24/7 reliability)
 
-`screen` lets the bot keep running even after you close the SSH browser tab.
+Using `systemd` ensures the bot automatically restarts on system reboots or transient crashes:
 
+1. Copy the service file template into systemd:
 ```bash
-sudo apt install screen -y
+sudo cp scripts/myboy_bot.service /etc/systemd/system/myboy_bot.service
 ```
 
-Again, if prompted about restarting services, select **none of the above**.
-
----
-
-### Step 7 — Start a screen session and run the bot
-
+2. Reload systemd, enable auto-start on boot, and start the bot:
 ```bash
-screen -S mybot
-source venv/bin/activate
-python main.py
+sudo systemctl daemon-reload
+sudo systemctl enable myboy_bot
+sudo systemctl start myboy_bot
+```
+
+3. Verify status:
+```bash
+sudo systemctl status myboy_bot
 ```
 
 ---
 
-### Step 8 — Detach from screen (keep bot running in background)
-
-Press:
-```
-Ctrl + A, then D
-```
-
-The bot is now running in the background. You can safely close the SSH tab.
-
----
-
-### Useful screen commands
+### Service Management Commands
 
 | Action | Command |
 |---|---|
-| Re-attach to running session | `screen -r mybot` |
-| List all screen sessions | `screen -ls` |
-| Stop the bot (inside screen) | `Ctrl + C` |
+| View live logs | `sudo journalctl -u myboy_bot -f` |
+| View recent 50 logs | `sudo journalctl -u myboy_bot -n 50 --no-pager` |
+| Check service status | `sudo systemctl status myboy_bot` |
+| Restart bot | `sudo systemctl restart myboy_bot` |
+| Stop bot | `sudo systemctl stop myboy_bot` |
 
 ---
 
-### update the bot / code
+### Updating the bot / code
 
-If you need to update code, you can use the following commands:
+When you push new code to GitHub and want to update the VM:
 
 ```bash
-# Re-attach to screen
-screen -r mybot
-
-# Stop the bot
-Ctrl + C
-
-# Pull latest code
+cd ~/myboy_bot
 git pull
+sudo systemctl restart myboy_bot
+```
 
-# Restart
+---
+
+### Alternative: Running with `screen` (Manual testing)
+
+If you prefer testing manually inside a terminal multiplexer:
+
+```bash
+# Start session
+screen -S mybot
+source venv/bin/activate
 python main.py
 
-# Detach again
-Ctrl + A, then D
+# Detach: Ctrl + A, then D
+# Re-attach: screen -r mybot
 ```
 
 ---
