@@ -24,6 +24,7 @@ class PersonalAssistant:
             return "GEMINI_API_KEY is missing."
 
         self.mistake_tools.current_image_path = image_path
+        self.current_image_path = image_path
         
         active_concepts = []
         try:
@@ -69,6 +70,10 @@ class PersonalAssistant:
         Do NOT output the flashcard word yourself. My UI will instantly load a random vocabulary word natively into the chat with interactive buttons!
         
         8. VOCABULARY STORY MODE: If the user asks for a story using their words, DO NOT output an ACTION. Instead, call `get_recent_vocab_for_story` to fetch 5 recent words, and write a fun, creative story using all of those words!
+        
+        9. DOCUMENT SCANNER & PDF: If the user sends a photo asking to convert to PDF, scan the document, remove shadows, or enhance readability (e.g., "转成pdf", "convert to pdf", "扫描这份文件", "去除阴影"), DO NOT log it as a mistake! Instead, naturally reply with a brief friendly confirmation and this exact special command on its own line:
+        [ACTION:SCAN_PDF]
+        My UI will automatically correct perspective, remove shadows using Magic Color, and send the clean PDF!
         
         Please format your final replies in markdown so it looks clean to the user. Do not leak internal tool logic.
         """

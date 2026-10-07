@@ -2,3 +2,5 @@ python-telegram-bot
 google-genai
 python-dotenv
 Pillow
+opencv-python-headless
+numpy

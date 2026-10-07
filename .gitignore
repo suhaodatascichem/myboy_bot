@@ -7,6 +7,7 @@ __pycache__/
 # User Data
 mistakes.db
 images/
+tests/test_output/
 
 # MacOS System Files
 .DS_Store

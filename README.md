@@ -12,6 +12,11 @@ An Agentic Personal Assistant designed to help parents track and gamify their pr
 - **Interactive Flashcards:** Ask the bot to test you on your vocabulary (e.g., "Quiz me on Business words"). It will present a word with a "Show Meaning" button. Click it to reveal the answer and mark it as mastered or keep it for later.
 - **Vocabulary Story Mode:** Ask the bot to "Write a story using my recent words" and it will generate a fun, creative story seamlessly integrating your recently learned vocabulary!
 - **Calendar Automation:** Send a photo of a school flyer or PTA meeting document to instantly generate a 1-click Google Calendar `add-to-calendar` URL!
+- **Document Scanner & Photo-to-PDF (Magic Color):**
+  - **Auto-Crop & Straighten:** Detects document boundaries and applies 4-point perspective warp to create flat, 90-degree rectangular pages.
+  - **Shadow Removal & Magic Color:** Employs computer vision morphological background estimation to eliminate dark phone/hand shadows and uneven lighting, leaving paper pure white while preserving vivid pencil and colored pen ink (CamScanner style).
+  - **Instant Single Scan:** Simply send a photo with caption `pdf` or `scan` to immediately get back an enhanced preview and `.pdf` file.
+  - **Multi-Page Session (`/scan`):** Start a session, upload multiple pages (or an album), remove/undo individual pages via interactive buttons (`[ 🗑 Remove Page ]`, `[ ↩️ Undo Last ]`), and compile them into a single multi-page PDF with `/done`.
 
 ---
 
@@ -155,6 +160,8 @@ When you push new code to GitHub and want to update the VM:
 ```bash
 cd ~/myboy_bot
 git pull
+source venv/bin/activate
+pip install -r requirements.txt
 sudo systemctl restart myboy_bot
 ```
 
