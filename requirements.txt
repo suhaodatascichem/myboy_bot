@@ -4,3 +4,4 @@ python-dotenv
 Pillow
 opencv-python-headless
 numpy
+pypdfium2

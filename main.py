@@ -19,17 +19,23 @@ logger = logging.getLogger(__name__)
 from database import init_db, get_random_mistake, mark_mistake_mastered_by_id, get_random_vocabulary, mark_vocabulary_mastered_by_id, get_vocabulary_by_id
 from agent import PersonalAssistant
 from skills.doc_scanner_skill import DocScannerTools
+from skills.exam_cleaner_skill import ExamCleanerTools
 
 pa = PersonalAssistant()
 doc_scanner = DocScannerTools()
+exam_cleaner = ExamCleanerTools(client=getattr(pa, "client", None))
 
 # Multi-page scanning session state: { user_id: { "pages": [{"id": 1, "path": "..."}], "next_id": 2 } }
 scan_sessions = {}
 
+CLEAN_KEYWORDS = [
+    "clean", "remove handwriting", "remove handwritting", "restoration",
+    "去手写", "擦除", "重测", "擦掉手写", "去笔迹", "消除笔迹"
+]
+
 async def is_authorized(update: Update) -> bool:
     user_id = update.effective_user.id
     if not ALLOWED_USER_ID:
-        # If not set, it allows anyone but prints their ID so the owner can find theirs easily
         logger.warning(f"*** ALLOWED_USER_ID is missing in .env! Public access by: {user_id} ***")
         return True
     
@@ -44,12 +50,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update): return
     welcome_message = (
         "👋 Welcome! I am 小程, your Personal Assistant.\n\n"
-        "I can currently help you with:\n"
-        "1️⃣ **Mistake Book**: Send me photos of test mistakes to track them automatically.\n"
-        "2️⃣ **Scheduling**: Send me photos of meeting letters or flyers, and I will generate 1-click Google Calendar links for you!\n"
-        "3️⃣ **Document Scanner**: Send `/scan` to batch scan homework pages into a crisp, shadow-free PDF (with Magic Color), or send any photo with caption `pdf` for an instant scan!\n\n"
-        "💬 **You can also simply text me!** Ask me to generate a practice quiz or summarize your child's weaknesses!\n\n"
-        "(You can tap the Menu button on the bottom left anytime to see all commands)."
+        "I can help you with:\n"
+        "1️⃣ **Mistake Book**: Send photos of test mistakes to track them automatically.\n"
+        "2️⃣ **Scheduling**: Send photos of meeting letters or flyers for 1-click Google Calendar links.\n"
+        "3️⃣ **Document Scanner**: Send `/scan` to batch scan pages into a crisp, shadow-free PDF (with Magic Color)!\n"
+        "4️⃣ **Exam Paper Restoration**: Send `/clean` or upload a photo/PDF with caption `clean` or `remove handwriting` to erase student answers, drafts, and red teacher marks for re-testing!\n\n"
+        "💬 **You can also simply text me!** Ask questions or review past mistakes anytime."
     )
     await update.message.reply_text(welcome_message, parse_mode="Markdown")
 
@@ -57,21 +63,38 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update): return
     help_text = (
         "🛠 **MyBoy Bot Guide**\n\n"
-        "📸 **Send a Photo**:\n"
+        "📸 **Photos & Documents**:\n"
         "• Photo alone: Logs a wrong question into Mistake Book.\n"
-        "• Photo with caption `pdf` or `scan`: Instantly crops, removes shadows, and converts to PDF!\n\n"
+        "• Photo with caption `pdf` or `scan`: Crops, removes shadows, and creates PDF.\n"
+        "• Photo or PDF with caption `clean` or `remove handwriting`: Erases handwriting & restores blank answer lines for re-testing!\n\n"
         "📄 **Document Scanner Commands**:\n"
         "🔹 `/scan` - Start a multi-page scanning session.\n"
         "🔹 `/done` - Compile scanned pages into a single PDF.\n"
         "🔹 `/cancel_scan` - Cancel active scanning session.\n\n"
+        "🧼 **Exam Restoration Commands**:\n"
+        "🔹 `/clean` - Guide to restoring marked exam papers & erasing handwriting.\n"
+        "🔹 `/restoration` - Alias for `/clean`.\n\n"
         "📚 **Other Commands**:\n"
         "🔹 `/analyze` - Get a breakdown of active weaknesses.\n"
         "🔹 `/help` - Show this message again."
     )
     await update.message.reply_text(help_text, parse_mode="Markdown")
 
+async def clean_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await is_authorized(update): return
+    clean_guide = (
+        "🧼 **Exam Paper Restoration Mode**\n\n"
+        "Send me a **photo** or a **multi-page PDF** of your child's marked exam paper.\n\n"
+        "**What I do:**\n"
+        "• Purge red teacher checkmarks, score circles, and blue ink\n"
+        "• Clear handwritten calculations, answers, and drafts\n"
+        "• Restore clean ruled answer lines (`______`)\n"
+        "• Deliver a brand-new, printable PDF ready for re-testing!\n\n"
+        "💡 **Quick Tip:** You can also simply send any photo or PDF with caption `clean` or `remove handwriting`!"
+    )
+    await update.message.reply_text(clean_guide, parse_mode="Markdown")
+
 async def finish_scan_session(chat_id: int, user_id: int, context: ContextTypes.DEFAULT_TYPE, message_obj=None):
-    """Compiles all uploaded pages in the user's scan session into a single multi-page PDF."""
     if user_id not in scan_sessions or not scan_sessions[user_id]["pages"]:
         msg = "⚠️ No scanned pages found! Send document photos first, or type `/scan` to start."
         if message_obj:
@@ -111,7 +134,6 @@ async def finish_scan_session(chat_id: int, user_id: int, context: ContextTypes.
         logger.error(f"Error during scan_multiple_images: {e}")
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Error generating PDF: {e}")
     finally:
-        # Clean up temporary photo pages
         for p in pages:
             if os.path.exists(p["path"]):
                 try: os.remove(p["path"])
@@ -127,7 +149,6 @@ async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update): return
     user_id = update.effective_user.id
 
-    # Clean up previous session if exists
     if user_id in scan_sessions:
         for p in scan_sessions[user_id]["pages"]:
             if os.path.exists(p["path"]):
@@ -169,7 +190,33 @@ async def cancel_scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def parse_and_send_reply(update: Update, reply: str, image_path: str = None):
     """Parses Gemini's reply for UI ACTION routing and sends the correct native telegram payload."""
-    # Check for Document Scanner action
+    # 1. Check for Exam Cleaner action
+    clean_match = re.search(r'\[ACTION:CLEAN_EXAM\]', reply, re.IGNORECASE)
+    if clean_match and image_path and os.path.exists(image_path):
+        clean_reply = re.sub(r'\[ACTION:CLEAN_EXAM\]', '', reply, flags=re.IGNORECASE).strip()
+        if clean_reply:
+            await update.message.reply_text(clean_reply, parse_mode="Markdown")
+        status_msg = await update.message.reply_text("🧼 Restoring exam paper: purging red marks, clearing answers, and restoring ruled lines...")
+        loop = asyncio.get_event_loop()
+        try:
+            preview_p, pdf_p = await loop.run_in_executor(None, exam_cleaner.clean_photo_file, image_path)
+            with open(preview_p, 'rb') as p_file:
+                await update.message.reply_photo(photo=p_file, caption="✨ Restored Exam Preview (Cleaned)")
+            with open(pdf_p, 'rb') as doc_file:
+                await update.message.reply_document(
+                    document=doc_file,
+                    filename="Cleaned_Exam_Paper.pdf",
+                    caption="📄 Here is your restored exam paper ready to print!"
+                )
+        except Exception as e:
+            logger.error(f"Error restoring exam from agent action: {e}")
+            await update.message.reply_text(f"❌ Failed to restore exam: {e}")
+        finally:
+            try: await status_msg.delete()
+            except Exception: pass
+        return
+
+    # 2. Check for Document Scanner action
     scan_match = re.search(r'\[ACTION:SCAN_PDF\]', reply, re.IGNORECASE)
     if scan_match and image_path and os.path.exists(image_path):
         clean_reply = re.sub(r'\[ACTION:SCAN_PDF\]', '', reply, flags=re.IGNORECASE).strip()
@@ -195,6 +242,7 @@ async def parse_and_send_reply(update: Update, reply: str, image_path: str = Non
             except Exception: pass
         return
 
+    # 3. Check for Mistake Review action
     match = re.search(r'\[ACTION:REVIEW_MISTAKE(?::(.*?))?(?::(.*?))?\]', reply, re.IGNORECASE)
     if match:
         subject = match.group(1) if match.group(1) else None
@@ -224,28 +272,83 @@ async def parse_and_send_reply(update: Update, reply: str, image_path: str = Non
                 await update.message.reply_text(f"Image not found, but here is the text:\n{caption}", reply_markup=reply_markup, parse_mode="Markdown")
         else:
             await update.message.reply_text(f"{clean_reply}\n\n*No active mistakes found matching that criteria!*", parse_mode="Markdown")
-    else:
-        vocab_match = re.search(r'\[ACTION:REVIEW_VOCAB(?::(.*?))?\]', reply, re.IGNORECASE)
-        if vocab_match:
-            category = vocab_match.group(1).strip() if vocab_match.group(1) else None
-            vocab = get_random_vocabulary(category)
-            clean_reply = re.sub(r'\[ACTION:REVIEW_VOCAB.*?\]', '', reply, flags=re.IGNORECASE).strip()
-            
-            if vocab:
-                v_id, v_word, v_meaning, v_translation, v_example, v_category = vocab
-                caption = f"🔤 **Vocabulary Flashcard:**\n\n# {v_word}"
-                if clean_reply:
-                    caption = f"{clean_reply}\n\n{caption}"
-                    
-                keyboard = [
-                    [InlineKeyboardButton("📖 Show Meaning", callback_data=f"show_vocab_meaning_{v_id}")]
-                ]
-                reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
-                await update.message.reply_text(caption, reply_markup=reply_markup, parse_mode="Markdown")
-            else:
-                await update.message.reply_text(f"{clean_reply}\n\n*No active vocabulary found matching that criteria!*", parse_mode="Markdown")
+        return
+
+    # 4. Check for Vocabulary Review action
+    vocab_match = re.search(r'\[ACTION:REVIEW_VOCAB(?::(.*?))?\]', reply, re.IGNORECASE)
+    if vocab_match:
+        category = vocab_match.group(1).strip() if vocab_match.group(1) else None
+        vocab = get_random_vocabulary(category)
+        clean_reply = re.sub(r'\[ACTION:REVIEW_VOCAB.*?\]', '', reply, flags=re.IGNORECASE).strip()
+        
+        if vocab:
+            v_id, v_word, v_meaning, v_translation, v_example, v_category = vocab
+            caption = f"🔤 **Vocabulary Flashcard:**\n\n# {v_word}"
+            if clean_reply:
+                caption = f"{clean_reply}\n\n{caption}"
+                
+            keyboard = [
+                [InlineKeyboardButton("📖 Show Meaning", callback_data=f"show_vocab_meaning_{v_id}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
+            await update.message.reply_text(caption, reply_markup=reply_markup, parse_mode="Markdown")
         else:
-            await update.message.reply_text(reply)
+            await update.message.reply_text(f"{clean_reply}\n\n*No active vocabulary found matching that criteria!*", parse_mode="Markdown")
+        return
+
+    await update.message.reply_text(reply)
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles incoming PDF files for multi-page exam cleaning or document processing."""
+    if not await is_authorized(update): return
+    doc = update.message.document
+    if not doc: return
+
+    is_pdf = doc.file_name.lower().endswith(".pdf") or (doc.mime_type and "pdf" in doc.mime_type)
+    if not is_pdf:
+        # If image sent as document, pass to photo handler
+        await handle_photo(update, context)
+        return
+
+    os.makedirs("images", exist_ok=True)
+    temp_pdf_path = f"images/temp_doc_{doc.file_id}.pdf"
+    doc_file = await doc.get_file()
+    await doc_file.download_to_drive(temp_pdf_path)
+
+    user_caption = (update.message.caption or "").strip()
+    status_msg = await update.message.reply_text("🧼 Cleaning PDF exam pages: removing handwriting, drafts, and restoring ruled lines...")
+
+    loop = asyncio.get_event_loop()
+    try:
+        timestamp = int(time.time())
+        out_pdf_name = f"Cleaned_{timestamp}_{doc.file_name}"
+        previews, final_pdf = await loop.run_in_executor(
+            None, exam_cleaner.clean_pdf_file, temp_pdf_path, out_pdf_name
+        )
+
+        if previews:
+            with open(previews[0], 'rb') as p_file:
+                await update.message.reply_photo(
+                    photo=p_file,
+                    caption=f"✨ **Page 1 Cleaned Preview** (Total: {len(previews)} pages)"
+                )
+
+        with open(final_pdf, 'rb') as out_file:
+            await update.message.reply_document(
+                document=out_file,
+                filename=f"Cleaned_{doc.file_name}",
+                caption=f"✅ **Restoration Complete!**\n📄 Cleaned **{len(previews)} page(s)** of answers & drafts. Ready to print like new!",
+                parse_mode="Markdown"
+            )
+    except Exception as e:
+        logger.error(f"Error cleaning PDF document: {e}")
+        await update.message.reply_text(f"❌ Failed to restore PDF: {e}")
+    finally:
+        if os.path.exists(temp_pdf_path):
+            try: os.remove(temp_pdf_path)
+            except Exception: pass
+        try: await status_msg.delete()
+        except Exception: pass
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not await is_authorized(update): return
@@ -289,7 +392,35 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Route 2: Instant Single-Photo Scan via Caption Keyword
+    # Route 2: Exam Paper Restoration (Clean Handwriting & Answers)
+    is_clean_request = any(k in user_caption.lower() for k in CLEAN_KEYWORDS)
+    if is_clean_request:
+        temp_image_path = f"images/temp_clean_{photo_file.file_id}.jpg"
+        await photo_file.download_to_drive(temp_image_path)
+        status_msg = await update.message.reply_text("🧼 Restoring exam paper: purging red marks, clearing answers, and restoring lines...")
+        loop = asyncio.get_event_loop()
+        try:
+            preview_p, pdf_p = await loop.run_in_executor(None, exam_cleaner.clean_photo_file, temp_image_path)
+            with open(preview_p, 'rb') as p_file:
+                await update.message.reply_photo(photo=p_file, caption="✨ Restored Exam Preview")
+            with open(pdf_p, 'rb') as doc_file:
+                await update.message.reply_document(
+                    document=doc_file,
+                    filename="Cleaned_Exam_Paper.pdf",
+                    caption="📄 Restored exam paper ready to print like new!"
+                )
+        except Exception as e:
+            logger.error(f"Error cleaning exam photo: {e}")
+            await update.message.reply_text(f"❌ Failed to restore exam: {e}")
+        finally:
+            if os.path.exists(temp_image_path):
+                try: os.remove(temp_image_path)
+                except Exception: pass
+            try: await status_msg.delete()
+            except Exception: pass
+        return
+
+    # Route 3: Instant Single-Photo Scan via Caption Keyword
     is_scan_request = any(k in user_caption.lower() for k in ["pdf", "scan", "扫描", "转成pdf", "去阴影"])
     if is_scan_request:
         temp_image_path = f"images/temp_instant_{photo_file.file_id}.jpg"
@@ -317,7 +448,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception: pass
         return
 
-    # Route 3: Standard Flow (Gemini Agent for Mistake Book / Calendar / Conversation)
+    # Route 4: Standard Flow (Gemini Agent for Mistake Book / Calendar / Conversation)
     temp_image_path = f"images/temp_{photo_file.file_id}.jpg"
     await photo_file.download_to_drive(temp_image_path)
     status_msg = await update.message.reply_text("📸 Let me take a look at this...")
@@ -491,6 +622,8 @@ async def post_init(application: Application):
     await application.bot.set_my_commands([
         BotCommand("start", "Restart 小程"),
         BotCommand("help", "See capabilities"),
+        BotCommand("clean", "Restore exam paper (remove handwriting)"),
+        BotCommand("restoration", "Alias for /clean"),
         BotCommand("scan", "Start document scanning session"),
         BotCommand("done", "Generate PDF from scanned pages"),
         BotCommand("cancel_scan", "Cancel scanning session"),
@@ -507,14 +640,17 @@ def main():
 
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("clean", clean_command))
+    app.add_handler(CommandHandler("restoration", clean_command))
     app.add_handler(CommandHandler("scan", scan_command))
     app.add_handler(CommandHandler("done", done_command))
     app.add_handler(CommandHandler("cancel_scan", cancel_scan_command))
+    app.add_handler(MessageHandler(filters.Document.PDF, handle_document))
     app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, handle_photo))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    logger.info("Starting Agentic Orchestrator with Document Scanner and Multi-page PDF...")
+    logger.info("Starting Agentic Orchestrator with Exam Cleaner and Document Scanner...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":

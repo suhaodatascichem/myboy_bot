@@ -16,7 +16,12 @@ An Agentic Personal Assistant designed to help parents track and gamify their pr
   - **Auto-Crop & Straighten:** Detects document boundaries and applies 4-point perspective warp to create flat, 90-degree rectangular pages.
   - **Shadow Removal & Magic Color:** Employs computer vision morphological background estimation to eliminate dark phone/hand shadows and uneven lighting, leaving paper pure white while preserving vivid pencil and colored pen ink (CamScanner style).
   - **Instant Single Scan:** Simply send a photo with caption `pdf` or `scan` to immediately get back an enhanced preview and `.pdf` file.
-  - **Multi-Page Session (`/scan`):** Start a session, upload multiple pages (or an album), remove/undo individual pages via interactive buttons (`[ 🗑 Remove Page ]`, `[ ↩️ Undo Last ]`), and compile them into a single multi-page PDF with `/done`.
+- **Exam Paper Restoration & Handwriting Removal:**
+  - **Re-test Your Kids:** Erase student answers, scratchwork, and teacher grading marks from old exam papers and worksheets, leaving only printed questions, math formulas, and diagrams intact so you can reprint them like brand-new tests!
+  - **Layout & Semantic Driven:** Uses lightweight layout analysis and Gemini 2.5 Flash spatial vision to identify math working areas and ruled answer lines (`______`) without heavy, memory-hogging neural models.
+  - **Ruled Line Restoration:** Reconstructs crisp, straight answer lines after wiping student handwriting.
+  - **Multi-Page PDF & Photo Support:** Upload either phone photos or an entire multi-page `.pdf` exam file forwarded from school or teacher chats.
+  - **Commands & Triggers:** Use `/clean` or `/restoration`, or send any photo or PDF with caption `clean` or `remove handwriting`.
 
 ---
 

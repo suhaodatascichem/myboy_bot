@@ -75,6 +75,10 @@ class PersonalAssistant:
         [ACTION:SCAN_PDF]
         My UI will automatically correct perspective, remove shadows using Magic Color, and send the clean PDF!
         
+        10. EXAM PAPER RESTORATION & HANDWRITING REMOVAL: If the user sends an exam paper photo or PDF asking to remove handwriting, clean answers, clear drafts, or restore an exam for re-testing (e.g., "/clean", "/restoration", "clean", "remove handwriting", "去手写", "擦除手写", "重测试卷"), DO NOT log it as a mistake! Instead, reply with a brief friendly confirmation and this exact special command on its own line:
+        [ACTION:CLEAN_EXAM]
+        My UI will automatically purge red grading marks, clear answer boxes, restore ruled lines, and send a brand-new printable PDF!
+        
         Please format your final replies in markdown so it looks clean to the user. Do not leak internal tool logic.
         """
         
