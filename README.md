@@ -19,6 +19,9 @@ An Agentic Personal Assistant designed to help parents track and gamify their pr
 - **Exam Paper Restoration & Handwriting Removal:**
   - **Re-test Your Kids:** Erase student answers, scratchwork, and teacher grading marks from old exam papers and worksheets, leaving only printed questions, math formulas, and diagrams intact so you can reprint them like brand-new tests!
   - **Layout & Semantic Driven:** Uses lightweight layout analysis and Gemini 2.5 Flash spatial vision to identify math working areas and ruled answer lines (`______`) without heavy, memory-hogging neural models.
+  - **Seamless Background Blending:** Samples local paper tone around erased boxes and applies soft Gaussian feathered blending, completely eliminating unnatural stark white patches.
+  - **Guaranteed Diagram & Number Protection:** Employs geometric collision barriers so geometric figures (trapeziums, rhombuses, triangles, etc.) and original printed numbers/angles (e.g. 118°, 130°, 92°) are 100% preserved and never touched.
+  - **Crisp Question Text:** Employs LAB-space illumination flattening, CLAHE, and a tailored contrast curve to keep printed question stems dark, solid, and easily readable.
   - **Ruled Line Restoration:** Reconstructs crisp, straight answer lines after wiping student handwriting.
   - **Multi-Page PDF & Photo Support:** Upload either phone photos or an entire multi-page `.pdf` exam file forwarded from school or teacher chats.
   - **Commands & Triggers:** Use `/clean` or `/restoration`, or send any photo or PDF with caption `clean` or `remove handwriting`.

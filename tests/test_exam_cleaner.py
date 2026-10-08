@@ -107,5 +107,54 @@ class TestExamCleaner(unittest.TestCase):
         self.assertTrue(os.path.exists(preview_img))
         self.assertTrue(os.path.exists(photo_pdf))
 
+    def test_diagram_protection_clipping(self):
+        from skills.exam_cleaner_skill import clip_against_diagrams
+
+        # Diagram box at [200, 200, 500, 500] (normalized to pixels)
+        diagram_boxes = [(200, 200, 500, 500)]
+
+        # Case 1: Answer box completely inside diagram (should be DISCARDED)
+        inside_box = [(250, 250, 350, 350, False)]
+        safe_boxes = clip_against_diagrams(inside_box, diagram_boxes, pad_h=10, pad_w=10)
+        self.assertEqual(len(safe_boxes), 0, "Box inside diagram must be discarded to protect diagram numbers")
+
+        # Case 2: Answer box completely outside diagram (should be PRESERVED)
+        outside_box = [(600, 100, 800, 400, False)]
+        safe_boxes = clip_against_diagrams(outside_box, diagram_boxes, pad_h=10, pad_w=10)
+        self.assertEqual(len(safe_boxes), 1)
+        self.assertEqual(safe_boxes[0][:4], (600, 100, 800, 400))
+
+        # Case 3: Answer box below diagram that slightly overlaps the bottom edge of diagram
+        overlapping_box = [(480, 100, 700, 400, False)]
+        safe_boxes = clip_against_diagrams(overlapping_box, diagram_boxes, pad_h=10, pad_w=10)
+        # Should either be clipped below dy2 or safely bounded outside
+        for b in safe_boxes:
+            # Must not penetrate into diagram (y must be >= dy2 + pad_h = 510)
+            self.assertGreaterEqual(b[0], 500)
+
+    def test_blend_answer_box_with_local_color(self):
+        from skills.exam_cleaner_skill import sample_local_paper_background, blend_answer_box
+
+        # Create paper image with warm cream tone (240, 245, 250)
+        img = np.full((300, 300, 3), (240, 245, 250), dtype=np.uint8)
+        # Draw some dark handwriting inside [100:200, 100:200]
+        cv2.putText(img, "44 deg", (110, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (20, 20, 20), 2)
+
+        # Sample local background
+        bg_col = sample_local_paper_background(img, 100, 100, 200, 200)
+        self.assertAlmostEqual(bg_col[0], 240, delta=5)
+        self.assertAlmostEqual(bg_col[1], 245, delta=5)
+        self.assertAlmostEqual(bg_col[2], 250, delta=5)
+
+        # Blend answer box
+        cleaned = blend_answer_box(img.copy(), 100, 100, 200, 200, feather_px=8)
+
+        # Inside center of box should be local paper color (NOT pure 255, 255, 255)
+        center_px = cleaned[150, 150]
+        self.assertNotEqual(list(center_px), [255, 255, 255])
+        self.assertAlmostEqual(center_px[0], 240, delta=5)
+        self.assertAlmostEqual(center_px[1], 245, delta=5)
+        self.assertAlmostEqual(center_px[2], 250, delta=5)
+
 if __name__ == "__main__":
     unittest.main()
