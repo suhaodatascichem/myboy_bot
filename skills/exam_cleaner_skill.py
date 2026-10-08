@@ -116,7 +116,7 @@ def semantic_clean_with_gemini(image: np.ndarray, client=None) -> np.ndarray:
     prompt = """
     You are an expert exam paper layout analyzer.
     Your task is to identify all regions containing STUDENT HANDWRITING, WRITTEN ANSWERS, 
-    MATH WORKING STEPS, and ROUGH DRAFTS that should be erased so the exam paper can be re-tested by a student.
+    MATH WORKING STEPS, ROUGH DRAFTS, and HANDWRITTEN ANNOTATIONS that should be erased so the exam paper can be re-tested by a student.
     
     Return a strictly valid JSON array of objects:
     [
@@ -127,13 +127,14 @@ def semantic_clean_with_gemini(image: np.ndarray, client=None) -> np.ndarray:
     ]
     Where:
     - [ymin, xmin, ymax, xmax] are normalized coordinates from 0 to 1000.
-    - "has_ruled_lines" is true if the answer area contains printed horizontal lines (______) or answer lines.
-    - "has_ruled_lines" is false if it is a blank math working area, scratchwork box, or margin draft.
+    - "has_ruled_lines" is true ONLY if the answer area contains printed horizontal lines (______) or answer lines.
+    - "has_ruled_lines" is false for blank math working areas, calculation spaces, or annotations.
 
     CRITICAL RULES:
-    1. DO NOT include printed question text, problem numbers, or formulas!
-    2. DO NOT include diagrams, geometry figures, coordinate axes, or illustrations!
-    3. ONLY return regions where a student filled in answers, calculations, or drafts.
+    1. DO NOT include printed question text, problem numbers, or printed formulas!
+    2. DO NOT erase printed diagram lines, geometry shapes, or vertex letter labels (e.g. A, B, C, D, J, K, L, M, P)!
+    3. CRITICAL: ALSO DETECT AND INCLUDE all student handwritten numbers, angles, or notes written INSIDE or NEAR diagrams (e.g. handwritten angle values like 88° or 25° written near vertices).
+    4. Group multi-line calculations in the same working area into a single coherent bounding box instead of thin separate strips.
     """
 
     try:
@@ -146,7 +147,6 @@ def semantic_clean_with_gemini(image: np.ndarray, client=None) -> np.ndarray:
         )
 
         raw_text = response.text.strip()
-        # Clean any markdown code blocks
         if raw_text.startswith("```json"):
             raw_text = raw_text[7:]
         if raw_text.startswith("```"):
@@ -158,33 +158,53 @@ def semantic_clean_with_gemini(image: np.ndarray, client=None) -> np.ndarray:
         if not isinstance(boxes_data, list):
             return image
 
-        cleaned_image = image.copy()
-
+        parsed_boxes = []
         for item in boxes_data:
             box = item.get("box_2d")
             has_lines = item.get("has_ruled_lines", False)
-
             if not box or len(box) != 4:
                 continue
 
             ymin, xmin, ymax, xmax = box
-            # Scale coordinates back to original image dimensions
             y1 = max(0, min(h - 1, int(ymin * h / 1000.0)))
             y2 = max(0, min(h, int(ymax * h / 1000.0)))
             x1 = max(0, min(w - 1, int(xmin * w / 1000.0)))
             x2 = max(0, min(w, int(xmax * w / 1000.0)))
 
-            if y2 <= y1 or x2 <= x1:
-                continue
+            if y2 > y1 and x2 > x1:
+                parsed_boxes.append([y1, x1, y2, x2, has_lines])
 
+        # Merge vertically adjacent boxes with significant horizontal overlap to prevent gaps
+        if parsed_boxes:
+            parsed_boxes = sorted(parsed_boxes, key=lambda b: b[0])
+            merged_boxes = [parsed_boxes[0]]
+            for cur in parsed_boxes[1:]:
+                prev = merged_boxes[-1]
+                overlap_x = max(0, min(prev[3], cur[3]) - max(prev[1], cur[1]))
+                min_w = min(prev[3] - prev[1], cur[3] - cur[1])
+                # If horizontal overlap > 40% and vertical gap <= 40px
+                if (min_w > 0 and overlap_x / min_w > 0.4) and (cur[0] - prev[2] <= 40):
+                    merged_boxes[-1] = [
+                        min(prev[0], cur[0]),
+                        min(prev[1], cur[1]),
+                        max(prev[2], cur[2]),
+                        max(prev[3], cur[3]),
+                        prev[4] or cur[4]
+                    ]
+                else:
+                    merged_boxes.append(cur)
+            parsed_boxes = merged_boxes
+
+        cleaned_image = image.copy()
+
+        for (y1, x1, y2, x2, has_lines) in parsed_boxes:
             roi = cleaned_image[y1:y2, x1:x2]
 
             if has_lines:
-                # Answer area with ruled lines: restore clean lines
                 cleaned_roi = restore_horizontal_ruled_lines(roi)
                 cleaned_image[y1:y2, x1:x2] = cleaned_roi
             else:
-                # Math working space or blank answer box: wipe completely white
+                # Math working space or blank box: fill with pure clean white
                 cleaned_image[y1:y2, x1:x2] = [255, 255, 255]
 
         return cleaned_image
@@ -196,22 +216,23 @@ def semantic_clean_with_gemini(image: np.ndarray, client=None) -> np.ndarray:
 def clean_exam_page(image: np.ndarray, client=None, enhance: bool = True) -> np.ndarray:
     """
     Cleans a single exam page:
-    1. Purges red teacher marks, blue ink, highlighter.
-    2. Cleans answer zones and working boxes via semantic vision (Gemini).
-    3. Enhances paper contrast with Magic Color.
+    1. Purges red teacher marks, blue ink, green pencil.
+    2. Normalizes lighting and paper background FIRST to avoid black border artifacts.
+    3. Cleans answer zones and working boxes via semantic vision (Gemini).
     """
-    # 1. Color Purge
+    # 1. Color Purge (red, blue, green)
     color_purged = purge_colored_ink(image)
 
-    # 2. Semantic Layout Clean
-    layout_cleaned = semantic_clean_with_gemini(color_purged, client=client)
-
-    # 3. Magic Color Contrast Enhancement
+    # 2. Normalize background FIRST (ensures paper is evenly white before erasing)
     if enhance:
-        final_enhanced = remove_shadows_and_enhance(layout_cleaned, mode="magic_color")
-        return final_enhanced
+        normalized = remove_shadows_and_enhance(color_purged, mode="magic_color")
+    else:
+        normalized = color_purged
 
-    return layout_cleaned
+    # 3. Semantic Layout Clean on the evenly normalized paper
+    final_cleaned = semantic_clean_with_gemini(normalized, client=client)
+
+    return final_cleaned
 
 class ExamCleanerTools:
     """

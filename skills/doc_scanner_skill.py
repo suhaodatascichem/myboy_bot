@@ -138,43 +138,31 @@ def remove_shadows_and_enhance(image: np.ndarray, mode: str = "magic_color") -> 
         return cv2.cvtColor(bw, cv2.COLOR_GRAY2BGR)
 
     # Default: 'magic_color'
-    # Process each BGR plane independently
-    planes = cv2.split(image)
-    result_planes = []
+    # Use LAB color space so we only normalize Lightness (L) without distorting color channels.
+    # This prevents cyan/blue chromatic noise and color fringing.
+    lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
     
-    for plane in planes:
-        # 1. Dilate to suppress dark characters and estimate paper background
-        dilated = cv2.dilate(plane, np.ones((7, 7), np.uint8))
-        # 2. Median blur to get a smooth illumination surface
-        bg = cv2.medianBlur(dilated, 21)
-        
-        # 3. Illumination flattening via division
-        # plane / bg * 255 normalizes paper background to ~255 (white)
-        plane_f = plane.astype(np.float32)
-        bg_f = np.maximum(bg.astype(np.float32), 1.0)
-        normalized = np.clip((plane_f / bg_f) * 255.0, 0, 255).astype(np.uint8)
-        
-        # 4. Contrast enhancement: stretch values so text is dark and paper is crisp white
-        # Clip top 2% brightest to pure 255
-        p_low = np.percentile(normalized, 1)
-        p_high = np.percentile(normalized, 95)
-        if p_high > p_low:
-            stretched = np.clip((normalized.astype(np.float32) - p_low) / (p_high - p_low) * 255.0, 0, 255).astype(np.uint8)
-        else:
-            stretched = normalized
-            
-        result_planes.append(stretched)
-        
-    enhanced = cv2.merge(result_planes)
+    # 1. Dilate to suppress dark characters and estimate paper background
+    dilated = cv2.dilate(l, np.ones((11, 11), np.uint8))
+    # 2. Median blur to get a smooth illumination surface
+    bg = cv2.medianBlur(dilated, 25)
     
-    # Mild sharpening to make handwritten strokes and text crisp
-    kernel_sharpening = np.array([
-        [0, -0.5, 0],
-        [-0.5, 3.0, -0.5],
-        [0, -0.5, 0]
-    ], dtype=np.float32)
-    sharpened = cv2.filter2D(enhanced, -1, kernel_sharpening)
-    return np.clip(sharpened, 0, 255).astype(np.uint8)
+    # 3. Illumination flattening via division on Lightness
+    l_f = l.astype(np.float32)
+    bg_f = np.maximum(bg.astype(np.float32), 1.0)
+    l_norm = np.clip((l_f / bg_f) * 255.0, 0, 255).astype(np.uint8)
+    
+    # 4. Contrast enhancement: stretch values so text is dark and paper is crisp white
+    p_low = np.percentile(l_norm, 1)
+    p_high = np.percentile(l_norm, 98)
+    if p_high > p_low:
+        l_stretched = np.clip((l_norm.astype(np.float32) - p_low) / (p_high - p_low) * 255.0, 0, 255).astype(np.uint8)
+    else:
+        l_stretched = l_norm
+        
+    enhanced = cv2.cvtColor(cv2.merge([l_stretched, a, b]), cv2.COLOR_LAB2BGR)
+    return enhanced
 
 def process_document_image(
     input_path: str,
